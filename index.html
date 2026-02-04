@@ -1,0 +1,422 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Reading Deep Dive Report - Rivers Yong</title>
+    <style>
+        :root {
+            --danger: #e53e3e;
+            --warning: #d69e2e;
+            --success: #38a169;
+            --text: #2d3748;
+            --text-light: #718096;
+            --border: #e2e8f0;
+            --bg: #f7fafc;
+        }
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            line-height: 1.5;
+            color: var(--text);
+            background: var(--bg);
+            padding: 2rem;
+        }
+        .container { max-width: 800px; margin: 0 auto; }
+        .header {
+            background: #1e3a5f;
+            color: white;
+            padding: 1.5rem;
+            border-radius: 8px 8px 0 0;
+        }
+        .header h1 { font-size: 1.25rem; margin-bottom: 0.25rem; }
+        .header p { opacity: 0.8; font-size: 0.9rem; }
+        .section {
+            background: white;
+            padding: 1.5rem;
+            border: 1px solid var(--border);
+            border-top: none;
+        }
+        .section:last-of-type { border-radius: 0 0 8px 8px; }
+        .section-title {
+            font-size: 1rem;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            color: var(--text-light);
+            margin-bottom: 1rem;
+            padding-bottom: 0.5rem;
+            border-bottom: 2px solid var(--border);
+        }
+        .metrics {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 1rem;
+            margin-bottom: 1rem;
+        }
+        .metric {
+            text-align: center;
+            padding: 0.75rem;
+            background: var(--bg);
+            border-radius: 6px;
+        }
+        .metric-value { font-size: 1.5rem; font-weight: 700; }
+        .metric-label { font-size: 0.75rem; color: var(--text-light); }
+        .metric.bad .metric-value { color: var(--danger); }
+        .metric.warn .metric-value { color: var(--warning); }
+        .metric.good .metric-value { color: var(--success); }
+        .root-cause {
+            background: #fff5f5;
+            border-left: 4px solid var(--danger);
+            padding: 0.75rem 1rem;
+            margin-top: 1rem;
+        }
+        .root-cause strong { color: var(--danger); }
+        .root-cause ul { margin-left: 1.25rem; margin-top: 0.5rem; }
+        .root-cause li { margin-bottom: 0.5rem; }
+        .fix-list { list-style: none; }
+        .fix-list li {
+            padding: 0.75rem;
+            margin-bottom: 0.5rem;
+            background: var(--bg);
+            border-radius: 6px;
+            border-left: 4px solid var(--danger);
+        }
+        .fix-list li:nth-child(2) { border-left-color: var(--warning); }
+        .fix-list li:nth-child(3) { border-left-color: var(--warning); }
+        .fix-list .fix-title { font-weight: 600; }
+        .fix-list .fix-detail { font-size: 0.85rem; color: var(--text-light); }
+        table { width: 100%; border-collapse: collapse; font-size: 0.85rem; }
+        th, td { padding: 0.5rem; text-align: left; border-bottom: 1px solid var(--border); }
+        th { background: var(--bg); font-weight: 600; color: var(--text-light); text-transform: uppercase; font-size: 0.75rem; }
+        .badge {
+            display: inline-block;
+            padding: 0.15rem 0.5rem;
+            border-radius: 9999px;
+            font-size: 0.7rem;
+            font-weight: 600;
+        }
+        .badge-danger { background: #fed7d7; color: #c53030; }
+        .badge-success { background: #c6f6d5; color: #276749; }
+        .badge-warning { background: #fefcbf; color: #975a16; }
+        .data-tables { display: grid; grid-template-columns: 1fr 1fr; gap: 1.5rem; }
+        .data-table h4 { font-size: 0.85rem; margin-bottom: 0.5rem; color: var(--text-light); }
+        @media (max-width: 600px) {
+            .metrics { grid-template-columns: repeat(2, 1fr); }
+            .data-tables { grid-template-columns: 1fr; }
+        }
+        .footer {
+            text-align: center;
+            padding: 1rem;
+            font-size: 0.75rem;
+            color: var(--text-light);
+        }
+        /* App Performance Bars */
+        .app-performance { margin-top: 1.5rem; }
+        .app-performance h4 { font-size: 0.85rem; margin-bottom: 0.75rem; color: var(--text-light); }
+        .app-row {
+            display: grid;
+            grid-template-columns: 100px 1fr;
+            gap: 1rem;
+            margin-bottom: 1rem;
+            padding: 0.75rem;
+            background: var(--bg);
+            border-radius: 6px;
+        }
+        .app-name {
+            font-weight: 600;
+            font-size: 0.85rem;
+            display: flex;
+            align-items: center;
+        }
+        .app-bars { display: flex; flex-direction: column; gap: 0.4rem; }
+        .bar-row {
+            display: grid;
+            grid-template-columns: 80px 1fr 50px;
+            gap: 0.5rem;
+            align-items: center;
+        }
+        .bar-label { font-size: 0.7rem; color: var(--text-light); }
+        .bar-track {
+            height: 12px;
+            background: #e2e8f0;
+            border-radius: 6px;
+            overflow: hidden;
+        }
+        .bar-fill { height: 100%; border-radius: 6px; }
+        .bar-fill.good { background: var(--success); }
+        .bar-fill.warn { background: var(--warning); }
+        .bar-fill.bad { background: var(--danger); }
+        .bar-value { font-size: 0.7rem; color: var(--text-light); text-align: right; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>Reading Deep Dive Report: Rivers Yong</h1>
+            <p>Grade 3 | Alpha School Austin | Winter 2025-26 MAP Assessment</p>
+        </div>
+
+        <div class="section">
+            <div class="section-title">1. Root Cause Analysis</div>
+            <div class="metrics">
+                <div class="metric good">
+                    <div class="metric-value">2.2x</div>
+                    <div class="metric-label">Winter-to-Winter Growth</div>
+                </div>
+                <div class="metric warn">
+                    <div class="metric-value">67%</div>
+                    <div class="metric-label">Idle Time</div>
+                </div>
+                <div class="metric bad">
+                    <div class="metric-value">0</div>
+                    <div class="metric-label">Grades Mastered</div>
+                </div>
+                <div class="metric bad">
+                    <div class="metric-value">40%</div>
+                    <div class="metric-label">Jan Quiz Accuracy</div>
+                </div>
+            </div>
+
+            <div class="root-cause">
+                <strong>Root Causes:</strong>
+                <ul>
+                    <li><strong>Summer Slide (-7 RIT):</strong> Winter 24-25 RIT 185 → Fall 25-26 RIT 178. No reading app usage over summer.</li>
+                    <li><strong>Premature G2-3 Placement:</strong> Placed in ClearFluency G2-3 content Sep 17 despite only passing G1 ORF benchmark (73 WCPM Level J, Aug 18). Level M test showed 41 WCPM @ 72% — well below G2 benchmark of 104 WCPM @ 95%.</li>
+                    <li><strong>High Idle Time:</strong> ClearFluency "Other" time = 67% of sessions. Only 33% productive learning time Sep 17 - Jan 23.</li>
+                    <li><strong>XP:Min Ratio Too Low:</strong> ClearFluency 0.45 XP/Min indicates content difficulty too high (ideal = 1:1). MobyMax 0.72 XP/Min slightly below target.</li>
+                    <li><strong>Curriculum Partial Mismatch:</strong> MAP identified Informational Text (203 RIT) as focus area. MobyMax assigned G3-8 Informational skills but accuracy variable 20-90% — never achieved consistent mastery.</li>
+                </ul>
+            </div>
+        </div>
+
+        <div class="section">
+            <div class="section-title">2. Remediation Plan</div>
+            <ol class="fix-list">
+                <li>
+                    <div class="fix-title">1. Adjust ClearFluency Placement to G1-2 Content</div>
+                    <div class="fix-detail">Rivers currently rostered in ClearFluency G2 Hole-Filling (last activity Jan 23). Move to G1-2 level content where ORF shows success. Target: XP/Min ratio ≥ 0.8.</div>
+                </li>
+                <li>
+                    <div class="fix-title">2. Reduce ClearFluency Idle Time</div>
+                    <div class="fix-detail">Implement timer-based accountability for ClearFluency sessions. Require full Step 1-2-3 cycle completion. Target: Idle time &lt; 20%.</div>
+                </li>
+                <li>
+                    <div class="fix-title">3. MobyMax Informational Text Focus at G2 Level</div>
+                    <div class="fix-detail">Rivers currently rostered in MobyMax Reading Skills (last activity Feb 2). Adjust to G2 Informational content aligned to MAP 203 RIT. Target: 80%+ accuracy before advancing.</div>
+                </li>
+            </ol>
+        </div>
+
+        <div class="section">
+            <div class="section-title">3. Supporting Data</div>
+
+            <div class="data-tables">
+                <div class="data-table">
+                    <h4>RIT Score Trajectory</h4>
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Period</th>
+                                <th>RIT</th>
+                                <th>Change</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr>
+                                <td>Winter 24-25</td>
+                                <td>185</td>
+                                <td>-</td>
+                            </tr>
+                            <tr>
+                                <td>Fall 25-26</td>
+                                <td>178</td>
+                                <td><span class="badge badge-danger">-7 (summer)</span></td>
+                            </tr>
+                            <tr>
+                                <td>Winter 25-26</td>
+                                <td>214</td>
+                                <td><span class="badge badge-success">+36</span></td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+                <div class="data-table">
+                    <h4>MAP Domain Scores (Winter 26)</h4>
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Domain</th>
+                                <th>RIT</th>
+                                <th>Status</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr>
+                                <td>Literary Text</td>
+                                <td>225</td>
+                                <td><span class="badge badge-success">Strength</span></td>
+                            </tr>
+                            <tr>
+                                <td>Vocabulary</td>
+                                <td>211</td>
+                                <td><span class="badge badge-warning">On Track</span></td>
+                            </tr>
+                            <tr>
+                                <td>Informational Text</td>
+                                <td>203</td>
+                                <td><span class="badge badge-danger">Focus Area</span></td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <div class="data-table" style="margin-top: 1.5rem;">
+                <h4>ORF Placement Check</h4>
+                <p style="font-size: 0.75rem; color: var(--text-light); margin-bottom: 0.5rem;">Benchmarks: G1=67 WCPM @ 95% (Level J), G2=104 WCPM @ 95% (Level M)</p>
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Text Level</th>
+                            <th>WCPM</th>
+                            <th>Accuracy</th>
+                            <th>Benchmark</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td>Level J (G1)</td>
+                            <td>73</td>
+                            <td>96%</td>
+                            <td><span class="badge badge-success">PASS</span></td>
+                        </tr>
+                        <tr>
+                            <td>Level M (G2)</td>
+                            <td>41</td>
+                            <td>72%</td>
+                            <td><span class="badge badge-danger">DID NOT PASS</span></td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+
+            <div class="data-table" style="margin-top: 1.5rem;">
+                <h4>ClearFluency Comprehension Skills (Weakest)</h4>
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Skill</th>
+                            <th>Score</th>
+                            <th>Status</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td>Visualize</td>
+                            <td>1/2 (50%)</td>
+                            <td><span class="badge badge-danger">Below</span></td>
+                        </tr>
+                        <tr>
+                            <td>Sequence</td>
+                            <td>3/6 (50%)</td>
+                            <td><span class="badge badge-danger">Below</span></td>
+                        </tr>
+                        <tr>
+                            <td>Figurative Language</td>
+                            <td>3/5 (60%)</td>
+                            <td><span class="badge badge-danger">Below</span></td>
+                        </tr>
+                        <tr>
+                            <td>Compare/Contrast</td>
+                            <td>10/15 (67%)</td>
+                            <td><span class="badge badge-warning">Approaching</span></td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+
+            <div class="app-performance">
+                <h4>App Performance Summary</h4>
+                <div class="app-row">
+                    <div class="app-name">ClearFluency</div>
+                    <div class="app-bars">
+                        <div class="bar-row">
+                            <span class="bar-label">Fluency</span>
+                            <div class="bar-track">
+                                <div class="bar-fill warn" style="width: 67%"></div>
+                            </div>
+                            <span class="bar-value">70 WCPM</span>
+                        </div>
+                        <div class="bar-row">
+                            <span class="bar-label">Active Time</span>
+                            <div class="bar-track">
+                                <div class="bar-fill bad" style="width: 33%"></div>
+                            </div>
+                            <span class="bar-value">33%</span>
+                        </div>
+                        <div class="bar-row">
+                            <span class="bar-label">Accuracy</span>
+                            <div class="bar-track">
+                                <div class="bar-fill bad" style="width: 56%"></div>
+                            </div>
+                            <span class="bar-value">56%</span>
+                        </div>
+                        <div class="bar-row">
+                            <span class="bar-label">XP/Min</span>
+                            <div class="bar-track">
+                                <div class="bar-fill bad" style="width: 45%"></div>
+                            </div>
+                            <span class="bar-value">0.45</span>
+                        </div>
+                        <div class="bar-row">
+                            <span class="bar-label">XP/Day</span>
+                            <div class="bar-track">
+                                <div class="bar-fill warn" style="width: 31%"></div>
+                            </div>
+                            <span class="bar-value">9.4</span>
+                        </div>
+                    </div>
+                </div>
+                <div class="app-row">
+                    <div class="app-name">MobyMax</div>
+                    <div class="app-bars">
+                        <div class="bar-row">
+                            <span class="bar-label">Active Time</span>
+                            <div class="bar-track">
+                                <div class="bar-fill good" style="width: 95%"></div>
+                            </div>
+                            <span class="bar-value">95%</span>
+                        </div>
+                        <div class="bar-row">
+                            <span class="bar-label">Accuracy</span>
+                            <div class="bar-track">
+                                <div class="bar-fill warn" style="width: 73%"></div>
+                            </div>
+                            <span class="bar-value">73%</span>
+                        </div>
+                        <div class="bar-row">
+                            <span class="bar-label">XP/Min</span>
+                            <div class="bar-track">
+                                <div class="bar-fill warn" style="width: 72%"></div>
+                            </div>
+                            <span class="bar-value">0.72</span>
+                        </div>
+                        <div class="bar-row">
+                            <span class="bar-label">XP/Day</span>
+                            <div class="bar-track">
+                                <div class="bar-fill warn" style="width: 35%"></div>
+                            </div>
+                            <span class="bar-value">10.5</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="footer">
+            Rivers Yong | Grade 3 | Alpha School Austin | Winter 2025-26<br>
+            Data: MAP Assessment, ClearFluency, MobyMax, ORF Assessments | Generated: February 2026
+        </div>
+    </div>
+</body>
+</html>
